@@ -22,6 +22,14 @@ const DIFFICULTY_CONFIGS = {
   hard: { startTime: 30.0, timeDecay: 0.1, words: HARD_WORDS, rounds: 20 }
 };
 
+const COLORS = {
+  reset: '\x1b[0m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  red: '\x1b[31m',
+  purple: '\x1b[35m'
+};
+
 function levenshtein(a, b) {
   const m = a.length, n = b.length;
   if (m === 0) return n;
@@ -103,13 +111,13 @@ async function runGame({ rounds = 10, startTime, timeDecay, words, difficulty = 
     });
 
     if (userInput === null || userInput.length === 0) {
-      console.log('  -> Time! No points this round.\n');
+      console.log(`  -> ${COLORS.red}Time! No points this round.${COLORS.reset}\n`);
       continue;
     }
 
     if (userInput === word) {
       score += 5;
-      console.log('  -> Perfect! +5\n');
+      console.log(`  -> ${COLORS.green}Perfect! +5${COLORS.reset}\n`);
       continue;
     }
 
@@ -117,13 +125,19 @@ async function runGame({ rounds = 10, startTime, timeDecay, words, difficulty = 
     const closeThreshold = Math.max(1, Math.floor(word.length * 0.3));
     if (dist <= closeThreshold) {
       score += 1;
-      console.log(`  -> Close (distance ${dist}) +1\n`);
+      console.log(`${COLORS.yellow}  -> Close (distance ${dist}) +1${COLORS.reset}\n`);
     } else {
-      console.log(`  -> Miss (distance ${dist}) +0\n`);
+      console.log(`${COLORS.red}  -> Miss (distance ${dist}) +0${COLORS.reset}\n`);
     }
   }
 
-  console.log('Game Over — total score:', score);
+  const maxScore = rounds * 5;
+  const winThreshold = Math.ceil(maxScore * 0.6);
+  if (score >= winThreshold) {
+    console.log(`${COLORS.purple}Game Over — You win! Total score: ${score}${COLORS.reset}`);
+  } else {
+    console.log(`${COLORS.red}Game Over — total score: ${score}${COLORS.reset}`);
+  }
   rl.close();
 }
 
