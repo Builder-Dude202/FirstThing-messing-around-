@@ -1,0 +1,168 @@
+#!/usr/bin/env node
+const readline = require('readline');
+
+const EASY_WORDS = [
+  'cat','dog','book','tree','sun','moon','apple','ball','car','hat','pen','cup','desk','home','fish'
+];
+
+const NORMAL_WORDS = [
+  'apple','banana','cherry','dragon','elephant','flower','guitar','horizon','island','jungle',
+  'keyboard','lemon','mountain','notebook','ocean','python','quartz','rocket','sunset','tiger',
+  'umbrella','violet','window','xylophone','yacht','zigzag','coffee','library','algorithm','function'
+];
+
+const HARD_WORDS = [
+  'xylophone','quartz','algorithm','synchronous','conscientious','onomatopoeia','hippopotamus',
+  'antidisestablishment','circumference','electroencephalograph','sesquipedalian','implementation'
+];
+
+const DIFFICULTY_CONFIGS = {
+  easy: { startTime: 10.0, timeDecay: 0.1, words: EASY_WORDS, rounds: 5 },
+  normal: { startTime: 5.0, timeDecay: 0.2, words: NORMAL_WORDS, rounds: 10 },
+  hard: { startTime: 2.0, timeDecay: 0.4, words: HARD_WORDS, rounds: 20 }
+};
+
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+async function ask(question, rl) {
+  return new Promise(resolve => {
+    rl.question(question, answer => resolve(answer.trim()));
+  });
+}
+
+async function runGame({ rounds = 10, startTime, timeDecay, words, difficulty = 'normal' }) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  let currentDifficulty = difficulty || 'normal';
+
+  let currentCfg;
+  if (startTime !== undefined && timeDecay !== undefined && words !== undefined) {
+    currentCfg = { startTime, timeDecay, words };
+  } else {
+    currentCfg = DIFFICULTY_CONFIGS[currentDifficulty];
+  }
+
+  console.log('Typing Minigame — type the shown word and press Enter.');
+  console.log('Perfect match = 5 pts, close spelling = 1 pt, miss = 0 pts.');
+  console.log('You can change difficulty before each round. Press Ctrl+C to quit.\n');
+
+  let score = 0;
+  let roundIndex = 1;
+  while (roundIndex <= rounds) {
+    const choice = await ask(`Choose difficulty (easy/normal/hard) or press Enter to keep [${currentDifficulty}]: `, rl);
+    if (choice && choice.trim().length > 0) {
+      const chosen = choice.trim().toLowerCase();
+      if (DIFFICULTY_CONFIGS[chosen]) {
+        currentDifficulty = chosen;
+        currentCfg = DIFFICULTY_CONFIGS[chosen];
+        // If the user didn't explicitly set rounds via CLI, update total rounds to the difficulty default
+        rounds = currentCfg.rounds;
+        console.log(`Difficulty set to ${currentDifficulty} — total rounds now ${rounds}\n`);
+      } else {
+        console.log(`Invalid difficulty "${choice}", keeping ${currentDifficulty}\n`);
+      }
+    }
+
+    const timeAllowed = Math.max(1.0, (currentCfg.startTime - (roundIndex - 1) * currentCfg.timeDecay));
+    const word = currentCfg.words[Math.floor(Math.random() * currentCfg.words.length)];
+
+    console.log(`Round ${roundIndex}/${rounds} — ${timeAllowed.toFixed(1)}s to type:`);
+    console.log('  ', word);
+
+    const userInput = await new Promise(resolve => {
+      let answered = false;
+      const timer = setTimeout(() => {
+        if (answered) return;
+        answered = true;
+        process.stdout.write('\n');
+        resolve(null); // timeout
+      }, Math.round(timeAllowed * 1000));
+
+      rl.once('line', line => {
+        if (answered) return;
+        answered = true;
+        clearTimeout(timer);
+        resolve(line.trim());
+      });
+
+      rl.prompt();
+    });
+
+    if (userInput === null || userInput.length === 0) {
+      console.log('  -> Time! No points this round.\n');
+      roundIndex++;
+      continue;
+    }
+
+    if (userInput === word) {
+      score += 5;
+      console.log('  -> Perfect! +5\n');
+      roundIndex++;
+      continue;
+    }
+
+    const dist = levenshtein(userInput, word);
+    const closeThreshold = Math.max(1, Math.floor(word.length * 0.3));
+    if (dist <= closeThreshold) {
+      score += 1;
+      console.log(`  -> Close (distance ${dist}) +1\n`);
+    } else {
+      console.log(`  -> Miss (distance ${dist}) +0\n`);
+    }
+    roundIndex++;
+  }
+
+  console.log('Game Over — total score:', score);
+  rl.close();
+}
+
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  const roundsArg = args.find(a => a.startsWith('--rounds='));
+  const startArg = args.find(a => a.startsWith('--start='));
+  const diffArg = args.find(a => a.startsWith('--difficulty=')) || args.find(a => a === '-d');
+  let roundsProvided = false;
+  let rounds = 0;
+  if (roundsArg) {
+    rounds = Number(roundsArg.split('=')[1]);
+    roundsProvided = true;
+  }
+  let difficulty = 'normal';
+  if (diffArg) {
+    if (diffArg === '-d') {
+      const idx = args.indexOf('-d');
+      const next = args[idx + 1];
+      if (next && !next.startsWith('--')) difficulty = next;
+    } else {
+      difficulty = diffArg.split('=')[1];
+    }
+  }
+  if (!DIFFICULTY_CONFIGS[difficulty]) difficulty = 'normal';
+  const cfg = DIFFICULTY_CONFIGS[difficulty];
+  const startTime = startArg ? Number(startArg.split('=')[1]) : cfg.startTime;
+  const timeDecay = cfg.timeDecay;
+  const words = cfg.words;
+  if (!roundsProvided) rounds = cfg.rounds;
+
+  runGame({ rounds, startTime, timeDecay, words, difficulty }).catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+}
