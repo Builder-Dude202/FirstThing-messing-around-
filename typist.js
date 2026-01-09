@@ -19,7 +19,7 @@ const HARD_WORDS = [
 const DIFFICULTY_CONFIGS = {
   easy: { startTime: 10.0, timeDecay: 0.1, words: EASY_WORDS, rounds: 5 },
   normal: { startTime: 5.0, timeDecay: 0.2, words: NORMAL_WORDS, rounds: 10 },
-  hard: { startTime: 2.0, timeDecay: 0.4, words: HARD_WORDS, rounds: 20 }
+  hard: { startTime: 30.0, timeDecay: 0.1, words: HARD_WORDS, rounds: 20 }
 };
 
 function levenshtein(a, b) {
@@ -61,25 +61,22 @@ async function runGame({ rounds = 10, startTime, timeDecay, words, difficulty = 
 
   console.log('Typing Minigame — type the shown word and press Enter.');
   console.log('Perfect match = 5 pts, close spelling = 1 pt, miss = 0 pts.');
-  console.log('You can change difficulty before each round. Press Ctrl+C to quit.\n');
+  console.log('Choose difficulty (easy/normal/hard) or press Enter to keep [' + currentDifficulty + ']:');
+  const initialChoice = await ask('> ', rl);
+  if (initialChoice && initialChoice.trim().length > 0) {
+    const chosen = initialChoice.trim().toLowerCase();
+    if (DIFFICULTY_CONFIGS[chosen]) {
+      currentDifficulty = chosen;
+      currentCfg = DIFFICULTY_CONFIGS[chosen];
+      if (!rounds) rounds = currentCfg.rounds;
+      console.log(`Difficulty set to ${currentDifficulty} — rounds: ${rounds}\n`);
+    } else {
+      console.log(`Invalid difficulty "${initialChoice}", using ${currentDifficulty}\n`);
+    }
+  }
 
   let score = 0;
-  let roundIndex = 1;
-  while (roundIndex <= rounds) {
-    const choice = await ask(`Choose difficulty (easy/normal/hard) or press Enter to keep [${currentDifficulty}]: `, rl);
-    if (choice && choice.trim().length > 0) {
-      const chosen = choice.trim().toLowerCase();
-      if (DIFFICULTY_CONFIGS[chosen]) {
-        currentDifficulty = chosen;
-        currentCfg = DIFFICULTY_CONFIGS[chosen];
-        // If the user didn't explicitly set rounds via CLI, update total rounds to the difficulty default
-        rounds = currentCfg.rounds;
-        console.log(`Difficulty set to ${currentDifficulty} — total rounds now ${rounds}\n`);
-      } else {
-        console.log(`Invalid difficulty "${choice}", keeping ${currentDifficulty}\n`);
-      }
-    }
-
+  for (let roundIndex = 1; roundIndex <= rounds; roundIndex++) {
     const timeAllowed = Math.max(1.0, (currentCfg.startTime - (roundIndex - 1) * currentCfg.timeDecay));
     const word = currentCfg.words[Math.floor(Math.random() * currentCfg.words.length)];
 
@@ -107,14 +104,12 @@ async function runGame({ rounds = 10, startTime, timeDecay, words, difficulty = 
 
     if (userInput === null || userInput.length === 0) {
       console.log('  -> Time! No points this round.\n');
-      roundIndex++;
       continue;
     }
 
     if (userInput === word) {
       score += 5;
       console.log('  -> Perfect! +5\n');
-      roundIndex++;
       continue;
     }
 
@@ -126,7 +121,6 @@ async function runGame({ rounds = 10, startTime, timeDecay, words, difficulty = 
     } else {
       console.log(`  -> Miss (distance ${dist}) +0\n`);
     }
-    roundIndex++;
   }
 
   console.log('Game Over — total score:', score);
